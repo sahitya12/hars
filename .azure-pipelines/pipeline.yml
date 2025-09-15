@@ -1,14 +1,17 @@
+# Modernization_Terraform/sanitychecks/.azure-pipelines/pipeline.yml
 trigger: none
 
 # -------- MONTHLY SCHEDULES (branch: develop_new) --------
 schedules:
 - cron: "5 2 1 * *"
   displayName: "Auto: AllADH NonProd (monthly)"
-  branches: { include: [ develop_new ] }
+  branches:
+    include: [ develop_new ]
   always: true
 - cron: "35 2 1 * *"
   displayName: "Auto: AllADH Prod (monthly)"
-  branches: { include: [ develop_new ] }
+  branches:
+    include: [ develop_new ]
   always: true
 
 # ------------------- MANUAL-RUN PARAMETERS -------------------
@@ -22,7 +25,7 @@ parameters:
   type: string
   default: ""
 
-- name: adh_groups_list           # e.g. ["CSM","NHH","MDH"]
+- name: adh_groups_list           # multi-custodian list, e.g. ["CSM","NHH"]
   type: object
   default: []
 
@@ -60,24 +63,24 @@ variables:
   - name: firstCustodian
     value: ${{ parameters.adh_groups_list[0] }}
 
-# ---------------- AUTO STAGES (AllADH on self-hosted fixed pools) ----------------
+# ---------------- AUTO STAGES (AllADH on fixed pools) ----------------
 stages:
 - stage: AUTO_AllADH_NonProd
   displayName: "AUTO AllADH – NonProd"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
-  - template: .azure-pipelines/stages/rg-permissions.stage.yml
+  - template: stages/rg-permissions.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: nonprd
-      prodCsvPath: $(prodCsvPath)
-      nonProdCsvPath: $(nonProdCsvPath)
+      prodCsvPath: ${{ parameters.prodCsvPath }}
+      nonProdCsvPath: ${{ parameters.nonProdCsvPath }}
       variableGroup: 'modernization_tfstate_backend_details'
       outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_nonprd_agent1'
-  - template: .azure-pipelines/stages/rg-tags.stage.yml
+  - template: stages/rg-tags.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: nonprd
@@ -86,17 +89,17 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_nonprd_agent1'
-  - template: .azure-pipelines/stages/kv-secrets.stage.yml
+  - template: stages/kv-secrets.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: nonprd
-      secretsCsvPath: $(kvSecretsCsvPath)
+      secretsCsvPath: ${{ parameters.kvSecretsCsvPath }}
       variableGroup: 'modernization_tfstate_backend_details'
       outDir: '$(Build.ArtifactStagingDirectory)/kv-secrets'
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_nonprd_agent1'
-  - template: .azure-pipelines/stages/kv-permissions.stage.yml
+  - template: stages/kv-permissions.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: nonprd
@@ -105,7 +108,7 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_nonprd_agent1'
-  - template: .azure-pipelines/stages/kv-firewall.stage.yml
+  - template: stages/kv-firewall.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: nonprd
@@ -119,18 +122,18 @@ stages:
   displayName: "AUTO AllADH – Prod"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
-  - template: .azure-pipelines/stages/rg-permissions.stage.yml
+  - template: stages/rg-permissions.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: prd
-      prodCsvPath: $(prodCsvPath)
-      nonProdCsvPath: $(nonProdCsvPath)
+      prodCsvPath: ${{ parameters.prodCsvPath }}
+      nonProdCsvPath: ${{ parameters.nonProdCsvPath }}
       variableGroup: 'modernization_tfstate_backend_details'
       outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_prd_agent1'
-  - template: .azure-pipelines/stages/rg-tags.stage.yml
+  - template: stages/rg-tags.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: prd
@@ -139,17 +142,17 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_prd_agent1'
-  - template: .azure-pipelines/stages/kv-secrets.stage.yml
+  - template: stages/kv-secrets.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: prd
-      secretsCsvPath: $(kvSecretsCsvPath)
+      secretsCsvPath: ${{ parameters.kvSecretsCsvPath }}
       variableGroup: 'modernization_tfstate_backend_details'
       outDir: '$(Build.ArtifactStagingDirectory)/kv-secrets'
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_prd_agent1'
-  - template: .azure-pipelines/stages/kv-permissions.stage.yml
+  - template: stages/kv-permissions.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: prd
@@ -158,7 +161,7 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_prd_agent1'
-  - template: .azure-pipelines/stages/kv-firewall.stage.yml
+  - template: stages/kv-firewall.stage.yml
     parameters:
       run_mode: AllADH
       adh_subscription_type: prd
@@ -172,7 +175,7 @@ stages:
 
 # Single custodian (ByCustodian with ONE adh_group)
 - ${{ if and(eq(parameters.run_mode, 'ByCustodian'), eq(length(parameters.adh_groups_list), 0)) }}:
-  - template: .azure-pipelines/stages/rg-permissions.stage.yml
+  - template: stages/rg-permissions.stage.yml
     parameters:
       run_mode: ByCustodian
       adh_group: ${{ parameters.adh_group }}
@@ -184,7 +187,7 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolSuffix: ${{ parameters.poolSuffix }}
-  - template: .azure-pipelines/stages/rg-tags.stage.yml
+  - template: stages/rg-tags.stage.yml
     parameters:
       run_mode: ByCustodian
       adh_group: ${{ parameters.adh_group }}
@@ -194,7 +197,7 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolSuffix: ${{ parameters.poolSuffix }}
-  - template: .azure-pipelines/stages/kv-secrets.stage.yml
+  - template: stages/kv-secrets.stage.yml
     parameters:
       run_mode: ByCustodian
       adh_group: ${{ parameters.adh_group }}
@@ -205,7 +208,7 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolSuffix: ${{ parameters.poolSuffix }}
-  - template: .azure-pipelines/stages/kv-permissions.stage.yml
+  - template: stages/kv-permissions.stage.yml
     parameters:
       run_mode: ByCustodian
       adh_group: ${{ parameters.adh_group }}
@@ -215,7 +218,7 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolSuffix: ${{ parameters.poolSuffix }}
-  - template: .azure-pipelines/stages/kv-firewall.stage.yml
+  - template: stages/kv-firewall.stage.yml
     parameters:
       run_mode: ByCustodian
       adh_group: ${{ parameters.adh_group }}
@@ -234,7 +237,7 @@ stages:
     - group: modernization_tfstate_backend_details
     jobs:
     - ${{ each cust in parameters.adh_groups_list }}:
-      - template: .azure-pipelines/templates/job.powershell-with-az.yml
+      - template: templates/job.powershell-with-az.yml
         parameters:
           variableGroup: modernization_tfstate_backend_details
           displayName: "RG Permissions – ${{ cust }}"
@@ -252,7 +255,7 @@ stages:
           adh_group: ${{ cust }}
           adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
-      - template: .azure-pipelines/templates/job.powershell-with-az.yml
+      - template: templates/job.powershell-with-az.yml
         parameters:
           variableGroup: modernization_tfstate_backend_details
           displayName: "RG Tags – ${{ cust }}"
@@ -268,7 +271,7 @@ stages:
           adh_group: ${{ cust }}
           adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
-      - template: .azure-pipelines/templates/job.powershell-with-az.yml
+      - template: templates/job.powershell-with-az.yml
         parameters:
           variableGroup: modernization_tfstate_backend_details
           displayName: "KV Secrets – ${{ cust }}"
@@ -285,7 +288,7 @@ stages:
           adh_group: ${{ cust }}
           adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
-      - template: .azure-pipelines/templates/job.powershell-with-az.yml
+      - template: templates/job.powershell-with-az.yml
         parameters:
           variableGroup: modernization_tfstate_backend_details
           displayName: "KV Permissions – ${{ cust }}"
@@ -301,7 +304,7 @@ stages:
           adh_group: ${{ cust }}
           adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
-      - template: .azure-pipelines/templates/job.powershell-with-az.yml
+      - template: templates/job.powershell-with-az.yml
         parameters:
           variableGroup: modernization_tfstate_backend_details
           displayName: "KV Firewall – ${{ cust }}"
