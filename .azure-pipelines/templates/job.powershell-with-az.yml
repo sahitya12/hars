@@ -11,10 +11,10 @@ parameters:
 
   # Agent control
   poolType: 'hosted'      # 'hosted' | 'self'
-  poolName: ''            # REQUIRED when poolType=self
+  poolName: ''            # REQUIRED when poolType=self (unless stage builds one)
 
   # Optional capability-based routing
-  adh_group: ''
+  adh_group: ''           # used only for demands
   adh_subscription_type: ''   # prd | nonprd
 
 jobs:
