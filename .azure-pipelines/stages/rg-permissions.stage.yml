@@ -1,22 +1,26 @@
+# Stage template: RG Permissions
 parameters:
-  run_mode: 'ByCustodian'
+  run_mode: 'ByCustodian'          # ByCustodian | AllADH
   adh_group: ''
-  adh_subscription_type: ''         # prd | nonprd
+  adh_subscription_type: ''        # prd | nonprd
   prodCsvPath: ''
   nonProdCsvPath: ''
   variableGroup: 'modernization_tfstate_backend_details'
   outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
   branchName: ''
-  poolType: 'hosted'
-  poolPrefix: ''                    # optional
-  poolSuffix: ''                    # e.g., '_agent1' or '_agent2'
-  poolName: ''                      # direct override when poolType=self
+  poolType: 'hosted'               # hosted | self
+  poolPrefix: ''                   # optional
+  poolSuffix: ''                   # e.g. '_agent1' or '_agent2'
+  poolName: ''                     # explicit override (when poolType=self)
 
-stages:
+# ---------- ByCustodian ----------
 - ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
   - stage: RG_Permissions_ByCustodian
-    displayName: "RG Permissions (ByCustodian)"
-    variables: { outDir: ${{ parameters.outDir }} }
+    displayName: "RG Permissions (ByCustodian: ${{ parameters.adh_group }})"
+
+    variables:
+      outDir: ${{ parameters.outDir }}
+
     jobs:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
@@ -25,20 +29,36 @@ stages:
         scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
-          -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-          -ProdCsvPath "${{ parameters.prodCsvPath }}" -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
-          -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+          -TenantId "$(tenant_id)"
+          -ClientId "$(backend_client_id)"
+          -ClientSecret "$(backend_client_secret)"
+          -ProdCsvPath "${{ parameters.prodCsvPath }}"
+          -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
+          -adh_group "${{ parameters.adh_group }}"
+          -OutputDir "$(outDir)"
+          -BranchName "${{ parameters.branchName }}"
         artifactName: "rg-perms"
         publishPath: "$(outDir)"
+
+        # Agent control
         poolType: ${{ parameters.poolType }}
-        poolName: ${{ coalesce(parameters.poolName, format('{0}{1}_{2}{3}', parameters.poolPrefix, parameters.adh_group, parameters.adh_subscription_type, parameters.poolSuffix)) }}
+        # Build pool name if not explicitly provided
+        ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolName, '')) }}:
+          poolName: ${{ parameters.poolName }}
+        ${{ if and(ne(parameters.poolType, 'hosted'), eq(parameters.poolName, '')) }}:
+          poolName: ${{ parameters.poolPrefix }}${{ parameters.adh_group }}_${{ parameters.adh_subscription_type }}${{ parameters.poolSuffix }}
+
         adh_group: ${{ parameters.adh_group }}
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
+# ---------- AllADH ----------
 - ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
   - stage: RG_Permissions_AllADH
     displayName: "RG Permissions (All ADH)"
-    variables: { outDir: ${{ parameters.outDir }} }
+
+    variables:
+      outDir: ${{ parameters.outDir }}
+
     jobs:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
@@ -47,12 +67,21 @@ stages:
         scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-AllADH.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
-          -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-          -ProdCsvPath "${{ parameters.prodCsvPath }}" -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
-          -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+          -TenantId "$(tenant_id)"
+          -ClientId "$(backend_client_id)"
+          -ClientSecret "$(backend_client_secret)"
+          -ProdCsvPath "${{ parameters.prodCsvPath }}"
+          -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
+          -OutputDir "$(outDir)"
+          -BranchName "${{ parameters.branchName }}"
         artifactName: "rg-perms-ALLADH"
         publishPath: "$(outDir)"
+
+        # Agent control
         poolType: ${{ parameters.poolType }}
-        poolName: ${{ parameters.poolName }}
+        # For AllADH, pass explicit poolName from pipeline (e.g. MDM_nonprd_agent1 / MDM_prd_agent1)
+        ${{ if ne(parameters.poolType, 'hosted') }}:
+          poolName: ${{ parameters.poolName }}
+
         adh_group: ''
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
