@@ -1,0 +1,80 @@
+# Modernization_Terraform/sanitychecks/.azure-pipelines/templates/job.powershell-with-az.yml
+parameters:
+  variableGroup: ''
+  displayName: ''
+  scriptPath: ''
+  workingDir: ''
+  arguments: ''
+  artifactName: ''
+  publishPath: ''
+  ensureAz: false
+
+  # Agent control
+  poolType: 'hosted'      # 'hosted' | 'self'
+  poolName: ''            # REQUIRED when poolType=self
+
+  # Optional capability-based routing
+  adh_group: ''
+  adh_subscription_type: ''   # prd | nonprd
+
+jobs:
+- job: run_powershell
+  displayName: ${{ parameters.displayName }}
+
+  # Agent selection
+  ${{ if eq(parameters.poolType, 'hosted') }}:
+    pool:
+      vmImage: 'windows-latest'
+  ${{ if ne(parameters.poolType, 'hosted') }}:
+    pool:
+      name: ${{ parameters.poolName }}
+      ${{ if and(ne(parameters.adh_group, ''), ne(parameters.adh_subscription_type, '')) }}:
+        demands:
+        - custodian -equals ${{ format('{0}_{1}', parameters.adh_group, parameters.adh_subscription_type) }}
+
+  variables:
+  - group: ${{ parameters.variableGroup }}
+
+  steps:
+  - checkout: self
+
+  - task: PowerShell@2
+    displayName: Prepare output folder
+    inputs:
+      targetType: inline
+      pwsh: true
+      script: |
+        $out = "${{ parameters.publishPath }}"
+        if ([string]::IsNullOrWhiteSpace($out)) { throw "publishPath parameter is empty." }
+        if (-not (Test-Path -LiteralPath $out)) { New-Item -ItemType Directory -Path $out -Force | Out-Null }
+        Write-Host "Prepared: $out"
+
+  - task: PowerShell@2
+    displayName: Run ${{ parameters.scriptPath }}
+    inputs:
+      targetType: filePath
+      filePath: ${{ parameters.scriptPath }}
+      workingDirectory: ${{ parameters.workingDir }}
+      arguments: ${{ parameters.arguments }}
+      pwsh: true
+
+  - task: PowerShell@2
+    displayName: List publish dir
+    inputs:
+      targetType: inline
+      pwsh: true
+      script: |
+        $out = "${{ parameters.publishPath }}"
+        if (Test-Path -LiteralPath $out) {
+          Get-ChildItem -Recurse -Force $out | Format-Table -AutoSize
+        } else {
+          Write-Warning "Publish path missing: $out"
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          Set-Content -Path (Join-Path $out 'README.txt') -Value 'No output files were produced.'
+        }
+
+  - task: PublishBuildArtifacts@1
+    displayName: Publish artifact
+    inputs:
+      PathtoPublish: ${{ parameters.publishPath }}
+      ArtifactName: ${{ parameters.artifactName }}
