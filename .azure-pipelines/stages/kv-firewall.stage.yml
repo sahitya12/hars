@@ -1,7 +1,8 @@
+# Stage template: Key Vault Network/Firewall
 parameters:
-  run_mode: 'ByCustodian'
+  run_mode: 'ByCustodian'          # ByCustodian | AllADH
   adh_group: ''
-  adh_subscription_type: ''
+  adh_subscription_type: ''        # prd | nonprd
   variableGroup: 'modernization_tfstate_backend_details'
   outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
   branchName: ''
@@ -10,11 +11,14 @@ parameters:
   poolSuffix: ''
   poolName: ''
 
-stages:
+# ---------- ByCustodian ----------
 - ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
   - stage: KV_Firewall_ByCustodian
-    displayName: "KV Firewall (ByCustodian)"
-    variables: { outDir: ${{ parameters.outDir }} }
+    displayName: "KV Firewall (ByCustodian: ${{ parameters.adh_group }})"
+
+    variables:
+      outDir: ${{ parameters.outDir }}
+
     jobs:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
@@ -23,19 +27,32 @@ stages:
         scriptPath: 'sanitychecks/scripts/Scan-KV-Networks.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
-          -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-          -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+          -TenantId "$(tenant_id)"
+          -ClientId "$(backend_client_id)"
+          -ClientSecret "$(backend_client_secret)"
+          -adh_group "${{ parameters.adh_group }}"
+          -OutputDir "$(outDir)"
+          -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-firewall"
         publishPath: "$(outDir)"
+
         poolType: ${{ parameters.poolType }}
-        poolName: ${{ coalesce(parameters.poolName, format('{0}{1}_{2}{3}', parameters.poolPrefix, parameters.adh_group, parameters.adh_subscription_type, parameters.poolSuffix)) }}
+        ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolName, '')) }}:
+          poolName: ${{ parameters.poolName }}
+        ${{ if and(ne(parameters.poolType, 'hosted'), eq(parameters.poolName, '')) }}:
+          poolName: ${{ parameters.poolPrefix }}${{ parameters.adh_group }}_${{ parameters.adh_subscription_type }}${{ parameters.poolSuffix }}
+
         adh_group: ${{ parameters.adh_group }}
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
+# ---------- AllADH ----------
 - ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
   - stage: KV_Firewall_AllADH
     displayName: "KV Firewall (All ADH)"
-    variables: { outDir: ${{ parameters.outDir }} }
+
+    variables:
+      outDir: ${{ parameters.outDir }}
+
     jobs:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
@@ -44,11 +61,18 @@ stages:
         scriptPath: 'sanitychecks/scripts/Scan-KV-Networks.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
-          -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-          -ScanAll -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+          -TenantId "$(tenant_id)"
+          -ClientId "$(backend_client_id)"
+          -ClientSecret "$(backend_client_secret)"
+          -ScanAll
+          -OutputDir "$(outDir)"
+          -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-firewall-ALLADH"
         publishPath: "$(outDir)"
+
         poolType: ${{ parameters.poolType }}
-        poolName: ${{ parameters.poolName }}
+        ${{ if ne(parameters.poolType, 'hosted') }}:
+          poolName: ${{ parameters.poolName }}
+
         adh_group: ''
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
