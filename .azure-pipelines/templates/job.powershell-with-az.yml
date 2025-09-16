@@ -1,4 +1,4 @@
-# Reusable job: runs a PowerShell script and publishes outputs
+# Modernization_Terraform/sanitychecks/.azure-pipelines/templates/job.powershell-with-az.yml
 parameters:
   variableGroup: ''
   displayName: ''
@@ -7,12 +7,14 @@ parameters:
   arguments: ''
   artifactName: ''
   publishPath: ''
+  ensureAz: false
 
   # Agent control
-  poolType: 'hosted'          # hosted | self
-  poolName: ''                # explicit override when self
-  poolSuffix: ''              # e.g. _agent1 / _agent2
-  adh_group: ''               # used to build pool when self
+  poolType: 'hosted'      # hosted | self
+  poolName: ''            # when poolType=self, supply a name or let a stage compute one
+
+  # Optional capability-based routing (if you use demands)
+  adh_group: ''
   adh_subscription_type: ''   # prd | nonprd
 
 jobs:
@@ -25,7 +27,10 @@ jobs:
       vmImage: 'windows-latest'
   ${{ if ne(parameters.poolType, 'hosted') }}:
     pool:
-      name: ${{ coalesce(parameters.poolName, format('{0}_{1}{2}', parameters.adh_group, parameters.adh_subscription_type, parameters.poolSuffix)) }}
+      name: ${{ parameters.poolName }}
+      ${{ if and(ne(parameters.adh_group, ''), ne(parameters.adh_subscription_type, '')) }}:
+        demands:
+        - custodian -equals ${{ format('{0}_{1}', parameters.adh_group, parameters.adh_subscription_type) }}
 
   variables:
   - group: ${{ parameters.variableGroup }}
