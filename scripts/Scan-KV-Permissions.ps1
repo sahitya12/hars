@@ -7,13 +7,12 @@ param(
   [string]$OutputDir="",
   [string]$BranchName=""
 )
-
 $ErrorActionPreference='Stop'
 Import-Module Az.Accounts -ErrorAction Stop
 Import-Module Az.Resources -ErrorAction Stop
 Import-Module Az.KeyVault -ErrorAction Stop
 
-function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p = Join-Path (Get-Location) 'kv-perms-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } return $p }
+function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p=Join-Path (Get-Location) 'kv-perms-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } $p }
 
 $sec=ConvertTo-SecureString $ClientSecret -AsPlainText -Force
 $cred=[pscredential]::new($ClientId,$sec)
@@ -36,10 +35,7 @@ foreach($sub in $subs){
     $scope="/subscriptions/$($sub.Id)/resourceGroups/$($v.ResourceGroupName)/providers/Microsoft.KeyVault/vaults/$($v.VaultName)"
     $ra=Get-AzRoleAssignment -Scope $scope -ErrorAction SilentlyContinue
     foreach($a in $ra){
-      $rbac.Add([pscustomobject]@{
-        SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Vault=$v.VaultName; ResourceGroup=$v.ResourceGroupName
-        Principal=$a.DisplayName; PrincipalId=$a.ObjectId; Role=$a.RoleDefinitionName; Scope=$a.Scope
-      })
+      $rbac.Add([pscustomobject]@{ SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Vault=$v.VaultName; ResourceGroup=$v.ResourceGroupName; Principal=$a.DisplayName; PrincipalId=$a.ObjectId; Role=$a.RoleDefinitionName; Scope=$a.Scope })
     }
     foreach($p in $v.AccessPolicies){
       $pol.Add([pscustomobject]@{
