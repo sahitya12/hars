@@ -1,7 +1,8 @@
+# Runs: ByCustodian (single), ByCustodian (multi-list), and ALLADH (monthly).
 trigger: none
 pr: none
 
-# Schedules are UTC. Example: 02:05/02:35 UTC on 1st = 07:35/08:05 IST.
+# UTC cron (example ~07:35 IST and ~08:05 IST on the 1st)
 schedules:
 - cron: "5 2 1 * *"
   displayName: "Monthly ALLADH – NonProd"
@@ -12,32 +13,37 @@ schedules:
   branches: { include: [ develop_new ] }
   always: true
 
-# ---------- Parameters ----------
+# ------------------- PARAMETERS -------------------
 parameters:
-- name: run_mode               # ByCustodian | AllADH | Multi
+# Mode switch: ByCustodian | AllADH
+- name: run_mode
   type: string
-  default: AllADH
-  values: [ ByCustodian, AllADH, Multi ]
+  default: ByCustodian
+  values: [ ByCustodian, AllADH ]
 
-- name: adh_group              # single custodian
+# Single custodian (used when run_mode=ByCustodian and list is empty)
+- name: adh_group
   type: string
   default: ""
 
-- name: adh_groups_list        # multi-custodian list
+# Multi-custodian list (used when run_mode=ByCustodian AND list has values)
+- name: adh_groups_list
   type: object
   default: []
 
-- name: adh_subscription_type  # prd | nonprd
+# prd | nonprd
+- name: adh_subscription_type
   type: string
-  default: nonprd
+  default: prd
   values: [ prd, nonprd ]
 
-- name: poolSuffix             # _agent1 or _agent2 etc.
+# agent suffix choice (_agent1 / _agent2 / etc.)
+- name: poolSuffix
   type: string
   default: '_agent1'
   values: [ '_agent1', '_agent2' ]
 
-# Inputs (CSV paths)
+# Inputs
 - name: prodCsvPath
   type: string
   default: '$(Build.SourcesDirectory)/sanitychecks/inputs/prod_permissions.csv'
@@ -48,7 +54,7 @@ parameters:
   type: string
   default: '$(Build.SourcesDirectory)/sanitychecks/inputs/kvsecretsscan.csv'
 
-# Compile-time helper: firstCustodian from list
+# ---------------- HELPER VARIABLES ----------------
 variables:
 - name: firstCustodian
   value: ''
@@ -56,12 +62,17 @@ variables:
   - name: firstCustodian
     value: ${{ parameters.adh_groups_list[0] }}
 
-# ---------- Stages ----------
-stages:
+# Compute pool names once (for single and multi)
+- name: poolNameSingle
+  value: ${{ format('{0}_{1}{2}', parameters.adh_group, parameters.adh_subscription_type, parameters.poolSuffix) }}
+- name: poolNameList
+  value: ${{ format('{0}_{1}{2}', variables.firstCustodian, parameters.adh_subscription_type, parameters.poolSuffix) }}
 
-# ===== Monthly ALLADH (NonProd) =====
-- stage: AUTO_AllADH_NonProd
-  displayName: "AUTO ALLADH – NonProd"
+# ---------------- STAGES ----------------
+
+# ========== Monthly ALLADH (NonProd) ==========
+- stage: ALLADH_NonProd
+  displayName: "ALLADH – NonProd (monthly)"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
   - template: stages/rg-permissions.stage.yml
@@ -113,9 +124,9 @@ stages:
       poolType: self
       poolName: 'MDM_nonprd_agent1'
 
-# ===== Monthly ALLADH (Prod) =====
-- stage: AUTO_AllADH_Prod
-  displayName: "AUTO ALLADH – Prod"
+# ========== Monthly ALLADH (Prod) ==========
+- stage: ALLADH_Prod
+  displayName: "ALLADH – Prod (monthly)"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
   - template: stages/rg-permissions.stage.yml
@@ -167,10 +178,11 @@ stages:
       poolType: self
       poolName: 'MDM_prd_agent1'
 
-# ===== Manual: Single custodian =====
-- ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
-  - stage: Manual_ByCustodian
-    displayName: "Manual – ByCustodian"
+# ========== Manual runs ==========
+# Single custodian (one adh_group)
+- ${{ if and(eq(parameters.run_mode,'ByCustodian'), eq(length(parameters.adh_groups_list), 0)) }}:
+  - stage: SingleCustodian_Run
+    displayName: ${{ format('ByCustodian – {0} ({1})', parameters.adh_group, parameters.adh_subscription_type) }}
     jobs:
     - template: stages/rg-permissions.stage.yml
       parameters:
@@ -183,7 +195,7 @@ stages:
         outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
         branchName: '$(Build.SourceBranchName)'
         poolType: self
-        poolSuffix: ${{ parameters.poolSuffix }}
+        poolName: $(poolNameSingle)
     - template: stages/rg-tags.stage.yml
       parameters:
         run_mode: ByCustodian
@@ -193,7 +205,7 @@ stages:
         outDir: '$(Build.ArtifactStagingDirectory)/rg-tags'
         branchName: '$(Build.SourceBranchName)'
         poolType: self
-        poolSuffix: ${{ parameters.poolSuffix }}
+        poolName: $(poolNameSingle)
     - template: stages/kv-secrets.stage.yml
       parameters:
         run_mode: ByCustodian
@@ -204,7 +216,7 @@ stages:
         outDir: '$(Build.ArtifactStagingDirectory)/kv-secrets'
         branchName: '$(Build.SourceBranchName)'
         poolType: self
-        poolSuffix: ${{ parameters.poolSuffix }}
+        poolName: $(poolNameSingle)
     - template: stages/kv-permissions.stage.yml
       parameters:
         run_mode: ByCustodian
@@ -214,7 +226,7 @@ stages:
         outDir: '$(Build.ArtifactStagingDirectory)/kv-perms'
         branchName: '$(Build.SourceBranchName)'
         poolType: self
-        poolSuffix: ${{ parameters.poolSuffix }}
+        poolName: $(poolNameSingle)
     - template: stages/kv-firewall.stage.yml
       parameters:
         run_mode: ByCustodian
@@ -224,35 +236,66 @@ stages:
         outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
         branchName: '$(Build.SourceBranchName)'
         poolType: self
-        poolSuffix: ${{ parameters.poolSuffix }}
+        poolName: $(poolNameSingle)
 
-# ===== Manual: Multi-custodian (serial) – pool from FIRST custodian =====
-- ${{ if and(eq(parameters.run_mode, 'Multi'), gt(length(parameters.adh_groups_list), 0)) }}:
-  - stage: Manual_Multi
-    displayName: "Manual – Multi-custodian (serial)"
-    variables:
-    - group: modernization_tfstate_backend_details
+# Multi-custodian (list) – use FIRST custodian to choose pool
+- ${{ if and(eq(parameters.run_mode,'ByCustodian'), gt(length(parameters.adh_groups_list), 0)) }}:
+  - stage: MultiCustodian_Run
+    displayName: ${{ format('ByCustodian – multi ({0})', join(',', parameters.adh_groups_list)) }}
     jobs:
-    - ${{ each cust in parameters.adh_groups_list }}:
-      - template: ./.azure-pipelines/templates/job.powershell-with-az.yml
-        parameters:
-          variableGroup: modernization_tfstate_backend_details
-          displayName: "RG Permissions – ${{ cust }}"
-          scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1'
-          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
-          arguments: >
-            -TenantId "$(tenant_id)"
-            -ClientId "$(backend_client_id)"
-            -ClientSecret "$(backend_client_secret)"
-            -ProdCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/prod_permissions.csv'
-            -NonProdCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/nonprod_permissions.csv'
-            -adh_group "${{ cust }}"
-            -OutputDir "$(Build.ArtifactStagingDirectory)/rg-perms"
-            -BranchName "$(Build.SourceBranchName)"
-          artifactName: "rg-perms"
-          publishPath: "$(Build.ArtifactStagingDirectory)/rg-perms"
-          poolType: self
-          # Use FIRST custodian for pool selection + suffix
-          poolName: ${{ format('{0}_{1}{2}', variables['firstCustodian'], parameters.adh_subscription_type, parameters.poolSuffix) }}
-          adh_group: ${{ cust }}
-          adh_subscription_type: ${{ parameters.adh_subscription_type }}
+    # RG Permissions
+    - template: stages/rg-permissions.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ variables.firstCustodian }}  # used for display name
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        prodCsvPath: ${{ parameters.prodCsvPath }}
+        nonProdCsvPath: ${{ parameters.nonProdCsvPath }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolName: $(poolNameList)
+        # We pass the *whole* list via env; each job template will only run once per template include.
+        # If you want per-custodian fan-out, run separate includes with each custodian.
+    - template: stages/rg-tags.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ variables.firstCustodian }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/rg-tags'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolName: $(poolNameList)
+    - template: stages/kv-secrets.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ variables.firstCustodian }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        secretsCsvPath: ${{ parameters.kvSecretsCsvPath }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/kv-secrets'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolName: $(poolNameList)
+    - template: stages/kv-permissions.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ variables.firstCustodian }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/kv-perms'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolName: $(poolNameList)
+    - template: stages/kv-firewall.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ variables.firstCustodian }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolName: $(poolNameList)
