@@ -1,4 +1,4 @@
-# Stage template: Key Vault Network/Firewall
+# Stage template: Key Vault Network/Firewall (single-stage wrapper)
 parameters:
   run_mode: 'ByCustodian'
   adh_group: ''
@@ -7,7 +7,6 @@ parameters:
   outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
   branchName: ''
   poolType: 'hosted'
-  poolPrefix: ''
   poolSuffix: '_agent1'
   poolName: ''
   useDemands: true
@@ -37,7 +36,6 @@ parameters:
           -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-firewall"
         publishPath: "$(outDir)"
-
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
@@ -57,7 +55,6 @@ parameters:
           -ScanAll -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-firewall-ALLADH"
         publishPath: "$(outDir)"
-
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
