@@ -1,4 +1,4 @@
-# Stage template: RG Tags
+# Stage template: RG Tags (single-stage wrapper)
 parameters:
   run_mode: 'ByCustodian'
   adh_group: ''
@@ -7,7 +7,6 @@ parameters:
   outDir: '$(Build.ArtifactStagingDirectory)/rg-tags'
   branchName: ''
   poolType: 'hosted'
-  poolPrefix: ''
   poolSuffix: '_agent1'
   poolName: ''
   useDemands: true
@@ -37,7 +36,6 @@ parameters:
           -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "rg-tags"
         publishPath: "$(outDir)"
-
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
@@ -57,7 +55,6 @@ parameters:
           -ScanAll -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "rg-tags-ALLADH"
         publishPath: "$(outDir)"
-
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
