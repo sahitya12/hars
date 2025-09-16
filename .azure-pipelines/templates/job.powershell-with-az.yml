@@ -1,4 +1,4 @@
-# Reusable job to run a PowerShell script and publish outputs
+# PowerShell job template with pool selection and optional capability demands
 parameters:
   variableGroup: ''
   displayName: ''
@@ -10,12 +10,12 @@ parameters:
   ensureAz: false
 
   # Agent control
-  poolType: 'hosted'      # hosted | self
-  poolName: ''            # required when poolType=self
-
-  # Optional capability-based routing
-  adh_group: ''
+  poolType: 'hosted'          # 'hosted' | 'self'
+  poolName: ''                # optional explicit name
+  poolSuffix: '_agent1'       # used only when poolType=self & poolName=''
+  adh_group: ''               # used for default pool name & optional demands
   adh_subscription_type: ''   # prd | nonprd
+  useDemands: true            # set false for multi-custodian shared pool
 
 jobs:
 - job: run_powershell
@@ -25,12 +25,16 @@ jobs:
   ${{ if eq(parameters.poolType, 'hosted') }}:
     pool:
       vmImage: 'windows-latest'
+
   ${{ if ne(parameters.poolType, 'hosted') }}:
     pool:
-      name: ${{ parameters.poolName }}
-      ${{ if and(ne(parameters.adh_group, ''), ne(parameters.adh_subscription_type, '')) }}:
+      ${{ if ne(parameters.poolName, '') }}:
+        name: ${{ parameters.poolName }}
+      ${{ if eq(parameters.poolName, '') }}:
+        name: ${{ format('{0}_{1}{2}', parameters.adh_group, parameters.adh_subscription_type, parameters.poolSuffix) }}
+      ${{ if and(parameters.useDemands, ne(parameters.adh_group, ''), ne(parameters.adh_subscription_type, '')) }}:
         demands:
-        - ${{ format('custodian -equals {0}_{1}', parameters.adh_group, parameters.adh_subscription_type) }}
+        - custodian -equals ${{ format('{0}_{1}', parameters.adh_group, parameters.adh_subscription_type) }}
 
   variables:
   - group: ${{ parameters.variableGroup }}
@@ -38,15 +42,18 @@ jobs:
   steps:
   - checkout: self
 
-  - ${{ if eq(parameters.ensureAz, true) }}:
+  - ${{ if parameters.ensureAz }}:
     - task: PowerShell@2
-      displayName: 'Ensure Az modules'
+      displayName: Ensure Az modules
       inputs:
-        pwsh: true
         targetType: inline
+        pwsh: true
         script: |
-          Install-Module Az -Scope CurrentUser -Force -AllowClobber
-          Get-Module Az.Accounts,Az.Resources,Az.KeyVault -ListAvailable | Select-Object Name,Version
+          try {
+            Get-Module -ListAvailable Az.Accounts | Out-Null
+          } catch {
+            Install-Module Az -Scope AllUsers -Force -AllowClobber
+          }
 
   - task: PowerShell@2
     displayName: Prepare output folder
@@ -56,7 +63,9 @@ jobs:
       script: |
         $out = "${{ parameters.publishPath }}"
         if ([string]::IsNullOrWhiteSpace($out)) { throw "publishPath parameter is empty." }
-        if (-not (Test-Path -LiteralPath $out)) { New-Item -ItemType Directory -Path $out -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $out)) {
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+        }
         Write-Host "Prepared: $out"
 
   - task: PowerShell@2
@@ -67,7 +76,6 @@ jobs:
       workingDirectory: ${{ parameters.workingDir }}
       arguments: ${{ parameters.arguments }}
       pwsh: true
-      failOnStderr: true
 
   - task: PowerShell@2
     displayName: List publish dir
