@@ -1,72 +1,38 @@
-# Modernization_Terraform/sanitychecks/.azure-pipelines/pipeline.yml
+# Runs ALLADH scans monthly. Manual runs are still possible.
 trigger: none
+pr: none
 
-# -------- MONTHLY SCHEDULES (branch: develop_new) --------
+# ⚠️ Azure DevOps schedules use UTC (not IST).
+# Example below = 02:05 UTC on the 1st of each month (which is 07:35 IST).
 schedules:
 - cron: "5 2 1 * *"
-  displayName: "Auto: AllADH NonProd (monthly)"
+  displayName: "Monthly ALLADH – NonProd"
   branches:
-    include: [ develop_new ]
+    include: [ develop_new ]   # change if you run from a different branch
   always: true
 - cron: "35 2 1 * *"
-  displayName: "Auto: AllADH Prod (monthly)"
+  displayName: "Monthly ALLADH – Prod"
   branches:
     include: [ develop_new ]
   always: true
 
-# ------------------- MANUAL-RUN PARAMETERS -------------------
+# (Optional) parameters if you also want to run this manually from the UI
 parameters:
-- name: run_mode
+- name: kvSecretsCsvPath
   type: string
-  default: ByCustodian
-  values: [ ByCustodian, AllADH ]
-
-- name: adh_group
-  type: string
-  default: ""
-
-- name: adh_groups_list           # multi-custodian list, e.g. ["CSM","NHH"]
-  type: object
-  default: []
-
-- name: adh_subscription_type
-  type: string
-  default: prd
-  values: [ prd, nonprd ]
-
-- name: poolSuffix                # choose agent1/agent2
-  type: string
-  default: '_agent1'
-  values: [ '_agent1', '_agent2' ]
-
-- name: poolType
-  type: string
-  default: self
-  values: [ hosted, self ]
-
-# Inputs
+  default: '$(Build.SourcesDirectory)/sanitychecks/inputs/kvsecretsscan.csv'
 - name: prodCsvPath
   type: string
   default: '$(Build.SourcesDirectory)/sanitychecks/inputs/prod_permissions.csv'
 - name: nonProdCsvPath
   type: string
   default: '$(Build.SourcesDirectory)/sanitychecks/inputs/nonprod_permissions.csv'
-- name: kvSecretsCsvPath
-  type: string
-  default: '$(Build.SourcesDirectory)/sanitychecks/inputs/kvsecretsscan.csv'
 
-# ---------------- COMPILE-TIME HELPER ----------------
-variables:
-- name: firstCustodian
-  value: ''
-- ${{ if gt(length(parameters.adh_groups_list), 0) }}:
-  - name: firstCustodian
-    value: ${{ parameters.adh_groups_list[0] }}
-
-# ---------------- AUTO STAGES (AllADH on fixed pools) ----------------
+# ---------------- ALLADH monthly stages ----------------
 stages:
-- stage: AUTO_AllADH_NonProd
-  displayName: "AUTO AllADH – NonProd"
+# ---------- NonProd ----------
+- stage: ALLADH_NonProd
+  displayName: "ALLADH – NonProd (monthly)"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
   - template: stages/rg-permissions.stage.yml
@@ -118,8 +84,9 @@ stages:
       poolType: self
       poolName: 'MDM_nonprd_agent1'
 
-- stage: AUTO_AllADH_Prod
-  displayName: "AUTO AllADH – Prod"
+# ---------- Prod ----------
+- stage: ALLADH_Prod
+  displayName: "ALLADH – Prod (monthly)"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
   - template: stages/rg-permissions.stage.yml
@@ -170,152 +137,3 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_prd_agent1'
-
-# ------------------- MANUAL RUNS -------------------
-
-# Single custodian (ByCustodian with ONE adh_group)
-- ${{ if and(eq(parameters.run_mode, 'ByCustodian'), eq(length(parameters.adh_groups_list), 0)) }}:
-  - template: stages/rg-permissions.stage.yml
-    parameters:
-      run_mode: ByCustodian
-      adh_group: ${{ parameters.adh_group }}
-      adh_subscription_type: ${{ parameters.adh_subscription_type }}
-      prodCsvPath: ${{ parameters.prodCsvPath }}
-      nonProdCsvPath: ${{ parameters.nonProdCsvPath }}
-      variableGroup: 'modernization_tfstate_backend_details'
-      outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
-      branchName: '$(Build.SourceBranchName)'
-      poolType: self
-      poolSuffix: ${{ parameters.poolSuffix }}
-  - template: stages/rg-tags.stage.yml
-    parameters:
-      run_mode: ByCustodian
-      adh_group: ${{ parameters.adh_group }}
-      adh_subscription_type: ${{ parameters.adh_subscription_type }}
-      variableGroup: 'modernization_tfstate_backend_details'
-      outDir: '$(Build.ArtifactStagingDirectory)/rg-tags'
-      branchName: '$(Build.SourceBranchName)'
-      poolType: self
-      poolSuffix: ${{ parameters.poolSuffix }}
-  - template: stages/kv-secrets.stage.yml
-    parameters:
-      run_mode: ByCustodian
-      adh_group: ${{ parameters.adh_group }}
-      adh_subscription_type: ${{ parameters.adh_subscription_type }}
-      secretsCsvPath: ${{ parameters.kvSecretsCsvPath }}
-      variableGroup: 'modernization_tfstate_backend_details'
-      outDir: '$(Build.ArtifactStagingDirectory)/kv-secrets'
-      branchName: '$(Build.SourceBranchName)'
-      poolType: self
-      poolSuffix: ${{ parameters.poolSuffix }}
-  - template: stages/kv-permissions.stage.yml
-    parameters:
-      run_mode: ByCustodian
-      adh_group: ${{ parameters.adh_group }}
-      adh_subscription_type: ${{ parameters.adh_subscription_type }}
-      variableGroup: 'modernization_tfstate_backend_details'
-      outDir: '$(Build.ArtifactStagingDirectory)/kv-perms'
-      branchName: '$(Build.SourceBranchName)'
-      poolType: self
-      poolSuffix: ${{ parameters.poolSuffix }}
-  - template: stages/kv-firewall.stage.yml
-    parameters:
-      run_mode: ByCustodian
-      adh_group: ${{ parameters.adh_group }}
-      adh_subscription_type: ${{ parameters.adh_subscription_type }}
-      variableGroup: 'modernization_tfstate_backend_details'
-      outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
-      branchName: '$(Build.SourceBranchName)'
-      poolType: self
-      poolSuffix: ${{ parameters.poolSuffix }}
-
-# Multi-custodian (each custodian uses its own pool with suffix)
-- ${{ if and(eq(parameters.run_mode, 'ByCustodian'), gt(length(parameters.adh_groups_list), 0)) }}:
-  - stage: MultiCustodian_Serial
-    displayName: "Sanity checks (multi-custodian serial)"
-    variables:
-    - group: modernization_tfstate_backend_details
-    jobs:
-    - ${{ each cust in parameters.adh_groups_list }}:
-      - template: templates/job.powershell-with-az.yml
-        parameters:
-          variableGroup: modernization_tfstate_backend_details
-          displayName: "RG Permissions – ${{ cust }}"
-          scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1'
-          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
-          arguments: >
-            -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-            -ProdCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/prod_permissions.csv'
-            -NonProdCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/nonprod_permissions.csv'
-            -adh_group "${{ cust }}" -OutputDir "$(Build.ArtifactStagingDirectory)/rg-perms" -BranchName "$(Build.SourceBranchName)"
-          artifactName: "rg-perms"
-          publishPath: "$(Build.ArtifactStagingDirectory)/rg-perms"
-          poolType: self
-          poolName: ${{ format('{0}_{1}{2}', cust, parameters.adh_subscription_type, parameters.poolSuffix) }}
-          adh_group: ${{ cust }}
-          adh_subscription_type: ${{ parameters.adh_subscription_type }}
-
-      - template: templates/job.powershell-with-az.yml
-        parameters:
-          variableGroup: modernization_tfstate_backend_details
-          displayName: "RG Tags – ${{ cust }}"
-          scriptPath: 'sanitychecks/scripts/Scan-RG-Tags.ps1'
-          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
-          arguments: >
-            -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-            -adh_group "${{ cust }}" -OutputDir "$(Build.ArtifactStagingDirectory)/rg-tags" -BranchName "$(Build.SourceBranchName)"
-          artifactName: "rg-tags"
-          publishPath: "$(Build.ArtifactStagingDirectory)/rg-tags"
-          poolType: self
-          poolName: ${{ format('{0}_{1}{2}', cust, parameters.adh_subscription_type, parameters.poolSuffix) }}
-          adh_group: ${{ cust }}
-          adh_subscription_type: ${{ parameters.adh_subscription_type }}
-
-      - template: templates/job.powershell-with-az.yml
-        parameters:
-          variableGroup: modernization_tfstate_backend_details
-          displayName: "KV Secrets – ${{ cust }}"
-          scriptPath: 'sanitychecks/scripts/Scan-KV-Secrets-ByCustodian.ps1'
-          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
-          arguments: >
-            -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-            -SecretCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/kvsecretsscan.csv'
-            -adh_group "${{ cust }}" -OutputDir "$(Build.ArtifactStagingDirectory)/kv-secrets" -BranchName "$(Build.SourceBranchName)"
-          artifactName: "kv-secrets"
-          publishPath: "$(Build.ArtifactStagingDirectory)/kv-secrets"
-          poolType: self
-          poolName: ${{ format('{0}_{1}{2}', cust, parameters.adh_subscription_type, parameters.poolSuffix) }}
-          adh_group: ${{ cust }}
-          adh_subscription_type: ${{ parameters.adh_subscription_type }}
-
-      - template: templates/job.powershell-with-az.yml
-        parameters:
-          variableGroup: modernization_tfstate_backend_details
-          displayName: "KV Permissions – ${{ cust }}"
-          scriptPath: 'sanitychecks/scripts/Scan-KV-Permissions.ps1'
-          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
-          arguments: >
-            -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-            -adh_group "${{ cust }}" -OutputDir "$(Build.ArtifactStagingDirectory)/kv-perms" -BranchName "$(Build.SourceBranchName)"
-          artifactName: "kv-perms"
-          publishPath: "$(Build.ArtifactStagingDirectory)/kv-perms"
-          poolType: self
-          poolName: ${{ format('{0}_{1}{2}', cust, parameters.adh_subscription_type, parameters.poolSuffix) }}
-          adh_group: ${{ cust }}
-          adh_subscription_type: ${{ parameters.adh_subscription_type }}
-
-      - template: templates/job.powershell-with-az.yml
-        parameters:
-          variableGroup: modernization_tfstate_backend_details
-          displayName: "KV Firewall – ${{ cust }}"
-          scriptPath: 'sanitychecks/scripts/Scan-KV-Networks.ps1'
-          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
-          arguments: >
-            -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-            -adh_group "${{ cust }}" -OutputDir "$(Build.ArtifactStagingDirectory)/kv-firewall" -BranchName "$(Build.SourceBranchName)"
-          artifactName: "kv-firewall"
-          publishPath: "$(Build.ArtifactStagingDirectory)/kv-firewall"
-          poolType: self
-          poolName: ${{ format('{0}_{1}{2}', cust, parameters.adh_subscription_type, parameters.poolSuffix) }}
-          adh_group: ${{ cust }}
-          adh_subscription_type: ${{ parameters.adh_subscription_type }}
