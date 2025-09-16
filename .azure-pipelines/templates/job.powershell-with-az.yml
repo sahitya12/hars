@@ -1,4 +1,4 @@
-# Modernization_Terraform/sanitychecks/.azure-pipelines/templates/job.powershell-with-az.yml
+# Reusable job to run a PowerShell script and publish outputs
 parameters:
   variableGroup: ''
   displayName: ''
@@ -11,9 +11,9 @@ parameters:
 
   # Agent control
   poolType: 'hosted'      # hosted | self
-  poolName: ''            # when poolType=self, supply a name or let a stage compute one
+  poolName: ''            # required when poolType=self
 
-  # Optional capability-based routing (if you use demands)
+  # Optional capability-based routing
   adh_group: ''
   adh_subscription_type: ''   # prd | nonprd
 
@@ -30,13 +30,23 @@ jobs:
       name: ${{ parameters.poolName }}
       ${{ if and(ne(parameters.adh_group, ''), ne(parameters.adh_subscription_type, '')) }}:
         demands:
-        - custodian -equals ${{ format('{0}_{1}', parameters.adh_group, parameters.adh_subscription_type) }}
+        - ${{ format('custodian -equals {0}_{1}', parameters.adh_group, parameters.adh_subscription_type) }}
 
   variables:
   - group: ${{ parameters.variableGroup }}
 
   steps:
   - checkout: self
+
+  - ${{ if eq(parameters.ensureAz, true) }}:
+    - task: PowerShell@2
+      displayName: 'Ensure Az modules'
+      inputs:
+        pwsh: true
+        targetType: inline
+        script: |
+          Install-Module Az -Scope CurrentUser -Force -AllowClobber
+          Get-Module Az.Accounts,Az.Resources,Az.KeyVault -ListAvailable | Select-Object Name,Version
 
   - task: PowerShell@2
     displayName: Prepare output folder
