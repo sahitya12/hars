@@ -1,29 +1,33 @@
-# Stage template: Key Vault Permissions (RBAC + AccessPolicies)
+# KV Permissions (RBAC + AccessPolicies)
 parameters:
-  run_mode: 'ByCustodian'          # ByCustodian | AllADH
+  run_mode: 'ByCustodian'
   adh_group: ''
-  adh_subscription_type: ''        # prd | nonprd
+  adh_subscription_type: ''
   variableGroup: 'modernization_tfstate_backend_details'
   outDir: '$(Build.ArtifactStagingDirectory)/kv-perms'
   branchName: ''
   poolType: 'hosted'
-  poolPrefix: ''
   poolSuffix: ''
   poolName: ''
 
-# ---------- ByCustodian ----------
-- ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
-  - stage: KV_Permissions_ByCustodian
-    displayName: "KV Permissions (ByCustodian: ${{ parameters.adh_group }})"
+- stage: KV_Permissions
+  displayName: >-
+    KV Permissions (${{
+      format('{0}{1}',
+        parameters.run_mode,
+        if(eq(parameters.run_mode, 'ByCustodian'), format(':{0}', parameters.adh_group), '')
+      )
+    }})
 
-    variables:
-      outDir: ${{ parameters.outDir }}
+  variables:
+    outDir: ${{ parameters.outDir }}
 
-    jobs:
+  jobs:
+  - ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
-        displayName: 'KV Permissions Scan (ByCustodian)'
+        displayName: 'KV Permissions (ByCustodian)'
         scriptPath: 'sanitychecks/scripts/Scan-KV-Permissions.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
@@ -35,29 +39,16 @@ parameters:
           -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-perms"
         publishPath: "$(outDir)"
-
         poolType: ${{ parameters.poolType }}
-        ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolName, '')) }}:
-          poolName: ${{ parameters.poolName }}
-        ${{ if and(ne(parameters.poolType, 'hosted'), eq(parameters.poolName, '')) }}:
-          poolName: ${{ parameters.poolPrefix }}${{ parameters.adh_group }}_${{ parameters.adh_subscription_type }}${{ parameters.poolSuffix }}
-
+        poolSuffix: ${{ parameters.poolSuffix }}
         adh_group: ${{ parameters.adh_group }}
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
-# ---------- AllADH ----------
-- ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
-  - stage: KV_Permissions_AllADH
-    displayName: "KV Permissions (All ADH)"
-
-    variables:
-      outDir: ${{ parameters.outDir }}
-
-    jobs:
+  - ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
-        displayName: 'KV Permissions Scan (AllADH)'
+        displayName: 'KV Permissions (AllADH)'
         scriptPath: 'sanitychecks/scripts/Scan-KV-Permissions.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
@@ -69,10 +60,7 @@ parameters:
           -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-perms-ALLADH"
         publishPath: "$(outDir)"
-
         poolType: ${{ parameters.poolType }}
-        ${{ if ne(parameters.poolType, 'hosted') }}:
-          poolName: ${{ parameters.poolName }}
-
+        poolName: ${{ parameters.poolName }}
         adh_group: ''
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
