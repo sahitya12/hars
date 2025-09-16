@@ -1,19 +1,23 @@
+# Stage template: Key Vault Network/Firewall
 parameters:
   run_mode: 'ByCustodian'
   adh_group: ''
-  adh_subscription_type: ''        # prd | nonprd
+  adh_subscription_type: ''
   variableGroup: 'modernization_tfstate_backend_details'
   outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
   branchName: ''
   poolType: 'hosted'
+  poolPrefix: ''
+  poolSuffix: '_agent1'
   poolName: ''
+  useDemands: true
 
 - stage: KV_Firewall
   displayName: >-
     KV Firewall (${{
       format('{0}{1}',
         parameters.run_mode,
-        if(eq(parameters.run_mode,'ByCustodian'), format(':{0}', parameters.adh_group), '')
+        if(eq(parameters.run_mode, 'ByCustodian'), format(':{0}', parameters.adh_group), '')
       )
     }})
 
@@ -30,11 +34,33 @@ parameters:
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
           -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
-          -adh_group "${{ parameters.adh_group }}"
-          -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+          -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "kv-firewall"
         publishPath: "$(outDir)"
+
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
+        poolSuffix: ${{ parameters.poolSuffix }}
         adh_group: ${{ parameters.adh_group }}
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        useDemands: ${{ parameters.useDemands }}
+
+  - ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
+    - template: ../templates/job.powershell-with-az.yml
+      parameters:
+        variableGroup: ${{ parameters.variableGroup }}
+        displayName: 'KV Firewall Scan (AllADH)'
+        scriptPath: 'sanitychecks/scripts/Scan-KV-Networks.ps1'
+        workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
+        arguments: >
+          -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
+          -ScanAll -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+        artifactName: "kv-firewall-ALLADH"
+        publishPath: "$(outDir)"
+
+        poolType: ${{ parameters.poolType }}
+        poolName: ${{ parameters.poolName }}
+        poolSuffix: ${{ parameters.poolSuffix }}
+        adh_group: ''
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        useDemands: false
