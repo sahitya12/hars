@@ -7,19 +7,18 @@ param(
   [string]$OutputDir = "",
   [string]$BranchName = ""
 )
-
 $ErrorActionPreference='Stop'
 Import-Module Az.Accounts -ErrorAction Stop
 Import-Module Az.Resources -ErrorAction Stop
 
-function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p = Join-Path (Get-Location) 'rg-tags-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } return $p }
+function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p=Join-Path (Get-Location) 'rg-tags-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } $p }
 
 $sec = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
 $cred = [pscredential]::new($ClientId,$sec)
 Connect-AzAccount -ServicePrincipal -Tenant $TenantId -Credential $cred | Out-Null
 
-$OutputDir = Ensure-Dir $OutputDir
-$stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
+$OutputDir=Ensure-Dir $OutputDir
+$stamp=(Get-Date).ToString('yyyyMMdd_HHmmss')
 $outCsv  = Join-Path $OutputDir "rg_tags_$stamp.csv"
 $outHtml = Join-Path $OutputDir "rg_tags_$stamp.html"
 $outJson = Join-Path $OutputDir "rg_tags_$stamp.json"
@@ -33,17 +32,11 @@ foreach($s in $subs){
   $rgs = Get-AzResourceGroup -ErrorAction SilentlyContinue
   foreach($rg in $rgs){
     $flat = if($rg.Tags){ ($rg.Tags.GetEnumerator()|%{"$($_.Key)=$($_.Value)"}) -join '; ' } else { '' }
-    $rows.Add([pscustomobject]@{
-      SubscriptionName=$s.Name; SubscriptionId=$s.Id; Environment=$env
-      ResourceGroup=$rg.ResourceGroupName; TagsFlat=$flat
-    })
+    $rows.Add([pscustomobject]@{ SubscriptionName=$s.Name; SubscriptionId=$s.Id; Environment=$env; ResourceGroup=$rg.ResourceGroupName; TagsFlat=$flat })
   }
 }
 
 $rows | Export-Csv $outCsv -NoTypeInformation -Encoding UTF8
 ($rows | ConvertTo-Html -Title "RG Tags $stamp" -PreContent "<h2>RG Tags ($BranchName)</h2>") | Set-Content -Path $outHtml -Encoding UTF8
 $rows | ConvertTo-Json -Depth 5 | Set-Content -Path $outJson -Encoding UTF8
-
-Write-Host "CSV:  $outCsv"
-Write-Host "HTML: $outHtml"
-Write-Host "JSON: $outJson"
+Write-Host "CSV: $outCsv"; Write-Host "HTML: $outHtml"; Write-Host "JSON: $outJson"
