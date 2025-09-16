@@ -1,4 +1,3 @@
-# Stage template: Key Vault Network/Firewall
 parameters:
   run_mode: 'ByCustodian'          # ByCustodian | AllADH
   adh_group: ''
@@ -6,20 +5,26 @@ parameters:
   variableGroup: 'modernization_tfstate_backend_details'
   outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
   branchName: ''
-  poolType: 'hosted'
+  poolType: 'hosted'               # hosted | self
   poolPrefix: ''
   poolSuffix: ''
   poolName: ''
 
-# ---------- ByCustodian ----------
-- ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
-  - stage: KV_Firewall_ByCustodian
-    displayName: "KV Firewall (ByCustodian: ${{ parameters.adh_group }})"
+- stage: KV_Firewall
+  displayName: >-
+    KV Firewall (${{
+      format('{0}{1}',
+        parameters.run_mode,
+        if(eq(parameters.run_mode, 'ByCustodian'), format(':{0}', parameters.adh_group), '')
+      )
+    }})
 
-    variables:
-      outDir: ${{ parameters.outDir }}
+  variables:
+    outDir: ${{ parameters.outDir }}
 
-    jobs:
+  jobs:
+  # ---------- ByCustodian job ----------
+  - ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
@@ -36,24 +41,19 @@ parameters:
         artifactName: "kv-firewall"
         publishPath: "$(outDir)"
 
+        # Agent control
         poolType: ${{ parameters.poolType }}
         ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolName, '')) }}:
           poolName: ${{ parameters.poolName }}
         ${{ if and(ne(parameters.poolType, 'hosted'), eq(parameters.poolName, '')) }}:
           poolName: ${{ parameters.poolPrefix }}${{ parameters.adh_group }}_${{ parameters.adh_subscription_type }}${{ parameters.poolSuffix }}
 
+        # Optional capability demand (if your agents use it)
         adh_group: ${{ parameters.adh_group }}
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
 
-# ---------- AllADH ----------
-- ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
-  - stage: KV_Firewall_AllADH
-    displayName: "KV Firewall (All ADH)"
-
-    variables:
-      outDir: ${{ parameters.outDir }}
-
-    jobs:
+  # ---------- AllADH job ----------
+  - ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
@@ -70,9 +70,10 @@ parameters:
         artifactName: "kv-firewall-ALLADH"
         publishPath: "$(outDir)"
 
+        # Agent control
         poolType: ${{ parameters.poolType }}
         ${{ if ne(parameters.poolType, 'hosted') }}:
           poolName: ${{ parameters.poolName }}
 
-        adh_group: ''
+        adh_group: ''  # not used
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
