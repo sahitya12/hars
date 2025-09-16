@@ -219,4 +219,40 @@ stages:
       parameters:
         run_mode: ByCustodian
         adh_group: ${{ parameters.adh_group }}
-        adh_subscription_
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolSuffix: ${{ parameters.poolSuffix }}
+
+# ===== Manual: Multi-custodian (serial) – pool from FIRST custodian =====
+- ${{ if and(eq(parameters.run_mode, 'Multi'), gt(length(parameters.adh_groups_list), 0)) }}:
+  - stage: Manual_Multi
+    displayName: "Manual – Multi-custodian (serial)"
+    variables:
+    - group: modernization_tfstate_backend_details
+    jobs:
+    - ${{ each cust in parameters.adh_groups_list }}:
+      - template: ./.azure-pipelines/templates/job.powershell-with-az.yml
+        parameters:
+          variableGroup: modernization_tfstate_backend_details
+          displayName: "RG Permissions – ${{ cust }}"
+          scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1'
+          workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
+          arguments: >
+            -TenantId "$(tenant_id)"
+            -ClientId "$(backend_client_id)"
+            -ClientSecret "$(backend_client_secret)"
+            -ProdCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/prod_permissions.csv'
+            -NonProdCsvPath '$(Build.SourcesDirectory)/sanitychecks/inputs/nonprod_permissions.csv'
+            -adh_group "${{ cust }}"
+            -OutputDir "$(Build.ArtifactStagingDirectory)/rg-perms"
+            -BranchName "$(Build.SourceBranchName)"
+          artifactName: "rg-perms"
+          publishPath: "$(Build.ArtifactStagingDirectory)/rg-perms"
+          poolType: self
+          # Use FIRST custodian for pool selection + suffix
+          poolName: ${{ format('{0}_{1}{2}', variables['firstCustodian'], parameters.adh_subscription_type, parameters.poolSuffix) }}
+          adh_group: ${{ cust }}
+          adh_subscription_type: ${{ parameters.adh_subscription_type }}
