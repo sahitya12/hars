@@ -1,4 +1,4 @@
-# RG Permissions (ByCustodian | AllADH)
+# Stage template: RG Permissions (single-stage wrapper)
 parameters:
   run_mode: 'ByCustodian'          # ByCustodian | AllADH
   adh_group: ''
@@ -9,9 +9,9 @@ parameters:
   outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
   branchName: ''
   poolType: 'hosted'               # hosted | self
-  poolPrefix: ''                   # unused here (kept for symmetry)
-  poolSuffix: ''                   # e.g. _agent1 | _agent2
-  poolName: ''                     # explicit override (AllADH fixed pools)
+  poolPrefix: ''
+  poolSuffix: ''                   # e.g. '_agent1' or '_agent2'
+  poolName: ''                     # explicit override when poolType=self
 
 - stage: RG_Permissions
   displayName: >-
@@ -31,7 +31,7 @@ parameters:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
-        displayName: 'RG Permissions (ByCustodian)'
+        displayName: 'RG Permissions Scan (ByCustodian)'
         scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
@@ -46,17 +46,21 @@ parameters:
         artifactName: "rg-perms"
         publishPath: "$(outDir)"
         poolType: ${{ parameters.poolType }}
-        # Self-hosted: poolName = adh_group + '_' + adh_subscription_type + poolSuffix
-        poolSuffix: ${{ parameters.poolSuffix }}
-        adh_group: ${{ parameters.adh_group }}
-        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolName, '')) }}:
+          poolName: ${{ format('{0}_{1}{2}', parameters.adh_group, parameters.adh_subscription_type, parameters.poolSuffix) }}
+        ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolSuffix, ''), ne(parameters.poolName, '')) }}:
+          adh_group: ${{ parameters.adh_group }}
+          adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        ${{ if and(ne(parameters.poolType, 'hosted'), ne(parameters.poolName, '')) }}:
+          # explicit override wins if provided
+          poolName: ${{ parameters.poolName }}
 
   # AllADH
   - ${{ if ne(parameters.run_mode, 'ByCustodian') }}:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
-        displayName: 'RG Permissions (AllADH)'
+        displayName: 'RG Permissions Scan (AllADH)'
         scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-AllADH.ps1'
         workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
@@ -70,7 +74,5 @@ parameters:
         artifactName: "rg-perms-ALLADH"
         publishPath: "$(outDir)"
         poolType: ${{ parameters.poolType }}
-        # For AllADH, pass explicit fixed pool names from pipeline.yml
-        poolName: ${{ parameters.poolName }}
-        adh_group: ''
-        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        ${{ if ne(parameters.poolType, 'hosted') }}:
+          poolName: ${{ parameters.poolName }}
