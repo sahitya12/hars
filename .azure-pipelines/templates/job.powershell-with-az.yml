@@ -1,4 +1,4 @@
-# PowerShell job template with pool selection and optional capability demands
+# PowerShell job template with pool selection + optional demands
 parameters:
   variableGroup: ''
   displayName: ''
@@ -10,12 +10,12 @@ parameters:
   ensureAz: false
 
   # Agent control
-  poolType: 'hosted'          # 'hosted' | 'self'
-  poolName: ''                # optional explicit name
-  poolSuffix: '_agent1'       # used only when poolType=self & poolName=''
-  adh_group: ''               # used for default pool name & optional demands
+  poolType: 'hosted'          # hosted | self
+  poolName: ''                # explicit name (when empty & poolType=self we compute)
+  poolSuffix: '_agent1'       # used when poolType=self & poolName=''
+  adh_group: ''               # for computed poolName & demands
   adh_subscription_type: ''   # prd | nonprd
-  useDemands: true            # set false for multi-custodian shared pool
+  useDemands: true            # false for multi-custodian shared pool
 
 jobs:
 - job: run_powershell
@@ -25,7 +25,6 @@ jobs:
   ${{ if eq(parameters.poolType, 'hosted') }}:
     pool:
       vmImage: 'windows-latest'
-
   ${{ if ne(parameters.poolType, 'hosted') }}:
     pool:
       ${{ if ne(parameters.poolName, '') }}:
