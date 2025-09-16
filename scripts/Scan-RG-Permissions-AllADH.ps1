@@ -49,4 +49,50 @@ $allOut = New-Object System.Collections.Generic.List[object]
 $subs = Get-AzSubscription | ? { $_.Name -match '(?i)ADH' }
 foreach($sub in $subs){
   Set-AzContext -Tenant $TenantId -SubscriptionId $sub.Id | Out-Null
-  $
+  $env = Get-EnvFromSub $sub.Name
+  $expected = if($env -eq 'PRODUCTION'){ $rowsProd } else { $rowsNonProd }
+  $cust = CustodianFromSub $sub.Name
+
+  $rgList = Get-AzResourceGroup -ErrorAction SilentlyContinue
+  $rgMap = @{}; foreach($rg in $rgList){ $rgMap[$rg.ResourceGroupName.ToLowerInvariant()]=$rg }
+
+  foreach($e in $expected){
+    $rgName   = $e.RG   -replace '<Custodian>', $cust
+    $roleName = $e.Role -replace '<Custodian>', $cust
+    $aadName  = $e.AAD  -replace '<Custodian>', $cust
+
+    $rgObj = $null
+    $rgKey = ($rgName ? $rgName.ToLowerInvariant() : '')
+    if($rgKey -and $rgMap.ContainsKey($rgKey)){ $rgObj = $rgMap[$rgKey] }
+
+    if(-not $rgObj){
+      $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+        InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
+        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='NOT_FOUND'; PermissionStatus='N/A_RG_NOT_FOUND'; Details='RG not found' })
+      continue
+    }
+
+    $grp = Resolve-Group $aadName
+    if(-not $grp){
+      $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+        InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
+        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='EXISTS'; PermissionStatus='N/A_GROUP_NOT_FOUND'; Details='Group not found' })
+      continue
+    }
+
+    $scope = "/subscriptions/$($sub.Id)/resourceGroups/$rgName"
+    $ra = Get-AzRoleAssignment -Scope $scope -ObjectId $grp.Id -RoleDefinitionName $roleName -ErrorAction SilentlyContinue
+    $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+      InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
+      InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; GroupObjectId=$grp.Id
+      RGStatus='EXISTS'; PermissionStatus=($(if($ra){'EXISTS'}else{'MISSING'})); Details=$(if($ra){''}else{'Role assignment missing'}) })
+  }
+}
+
+$allOut | Export-Csv $outCsv -NoTypeInformation -Encoding UTF8
+($allOut | ConvertTo-Html -Title "RG Permissions ALLADH $stamp" -PreContent "<h2>RG Permissions ALLADH ($BranchName)</h2>") | Set-Content -Path $outHtml -Encoding UTF8
+$allOut | ConvertTo-Json -Depth 5 | Set-Content -Path $outJson -Encoding UTF8
+
+Write-Host "CSV:  $outCsv"
+Write-Host "HTML: $outHtml"
+Write-Host "JSON: $outJson"
