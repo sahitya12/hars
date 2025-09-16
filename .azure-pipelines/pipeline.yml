@@ -1,38 +1,67 @@
-# Runs ALLADH scans monthly. Manual runs are still possible.
 trigger: none
 pr: none
 
-# ⚠️ Azure DevOps schedules use UTC (not IST).
-# Example below = 02:05 UTC on the 1st of each month (which is 07:35 IST).
+# Schedules are UTC. Example: 02:05/02:35 UTC on 1st = 07:35/08:05 IST.
 schedules:
 - cron: "5 2 1 * *"
   displayName: "Monthly ALLADH – NonProd"
-  branches:
-    include: [ develop_new ]   # change if you run from a different branch
+  branches: { include: [ develop_new ] }
   always: true
 - cron: "35 2 1 * *"
   displayName: "Monthly ALLADH – Prod"
-  branches:
-    include: [ develop_new ]
+  branches: { include: [ develop_new ] }
   always: true
 
-# (Optional) parameters if you also want to run this manually from the UI
+# ---------- Parameters ----------
 parameters:
-- name: kvSecretsCsvPath
+- name: run_mode               # ByCustodian | AllADH | Multi
   type: string
-  default: '$(Build.SourcesDirectory)/sanitychecks/inputs/kvsecretsscan.csv'
+  default: AllADH
+  values: [ ByCustodian, AllADH, Multi ]
+
+- name: adh_group              # single custodian
+  type: string
+  default: ""
+
+- name: adh_groups_list        # multi-custodian list
+  type: object
+  default: []
+
+- name: adh_subscription_type  # prd | nonprd
+  type: string
+  default: nonprd
+  values: [ prd, nonprd ]
+
+- name: poolSuffix             # _agent1 or _agent2 etc.
+  type: string
+  default: '_agent1'
+  values: [ '_agent1', '_agent2' ]
+
+# Inputs (CSV paths)
 - name: prodCsvPath
   type: string
   default: '$(Build.SourcesDirectory)/sanitychecks/inputs/prod_permissions.csv'
 - name: nonProdCsvPath
   type: string
   default: '$(Build.SourcesDirectory)/sanitychecks/inputs/nonprod_permissions.csv'
+- name: kvSecretsCsvPath
+  type: string
+  default: '$(Build.SourcesDirectory)/sanitychecks/inputs/kvsecretsscan.csv'
 
-# ---------------- ALLADH monthly stages ----------------
+# Compile-time helper: firstCustodian from list
+variables:
+- name: firstCustodian
+  value: ''
+- ${{ if gt(length(parameters.adh_groups_list), 0) }}:
+  - name: firstCustodian
+    value: ${{ parameters.adh_groups_list[0] }}
+
+# ---------- Stages ----------
 stages:
-# ---------- NonProd ----------
-- stage: ALLADH_NonProd
-  displayName: "ALLADH – NonProd (monthly)"
+
+# ===== Monthly ALLADH (NonProd) =====
+- stage: AUTO_AllADH_NonProd
+  displayName: "AUTO ALLADH – NonProd"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
   - template: stages/rg-permissions.stage.yml
@@ -84,9 +113,9 @@ stages:
       poolType: self
       poolName: 'MDM_nonprd_agent1'
 
-# ---------- Prod ----------
-- stage: ALLADH_Prod
-  displayName: "ALLADH – Prod (monthly)"
+# ===== Monthly ALLADH (Prod) =====
+- stage: AUTO_AllADH_Prod
+  displayName: "AUTO ALLADH – Prod"
   condition: and(eq(variables['Build.Reason'],'Schedule'), eq(variables['Build.SourceBranchName'],'develop_new'))
   jobs:
   - template: stages/rg-permissions.stage.yml
@@ -137,3 +166,57 @@ stages:
       branchName: '$(Build.SourceBranchName)'
       poolType: self
       poolName: 'MDM_prd_agent1'
+
+# ===== Manual: Single custodian =====
+- ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
+  - stage: Manual_ByCustodian
+    displayName: "Manual – ByCustodian"
+    jobs:
+    - template: stages/rg-permissions.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ parameters.adh_group }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        prodCsvPath: ${{ parameters.prodCsvPath }}
+        nonProdCsvPath: ${{ parameters.nonProdCsvPath }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolSuffix: ${{ parameters.poolSuffix }}
+    - template: stages/rg-tags.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ parameters.adh_group }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/rg-tags'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolSuffix: ${{ parameters.poolSuffix }}
+    - template: stages/kv-secrets.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ parameters.adh_group }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        secretsCsvPath: ${{ parameters.kvSecretsCsvPath }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/kv-secrets'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolSuffix: ${{ parameters.poolSuffix }}
+    - template: stages/kv-permissions.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ parameters.adh_group }}
+        adh_subscription_type: ${{ parameters.adh_subscription_type }}
+        variableGroup: 'modernization_tfstate_backend_details'
+        outDir: '$(Build.ArtifactStagingDirectory)/kv-perms'
+        branchName: '$(Build.SourceBranchName)'
+        poolType: self
+        poolSuffix: ${{ parameters.poolSuffix }}
+    - template: stages/kv-firewall.stage.yml
+      parameters:
+        run_mode: ByCustodian
+        adh_group: ${{ parameters.adh_group }}
+        adh_subscription_
