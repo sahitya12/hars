@@ -2,8 +2,8 @@ param(
   [Parameter(Mandatory=$true)][string]$TenantId,
   [Parameter(Mandatory=$true)][string]$ClientId,
   [Parameter(Mandatory=$true)][string]$ClientSecret,
-  [Parameter(Mandatory=$true)][string]$ProdCsvPath,      # headers: resource_group_name,role_definition_name,ad_group_name
-  [Parameter(Mandatory=$true)][string]$NonProdCsvPath,   # same headers
+  [Parameter(Mandatory=$true)][string]$ProdCsvPath,
+  [Parameter(Mandatory=$true)][string]$NonProdCsvPath,
   [Parameter(Mandatory=$true)][string]$adh_group,
   [string]$OutputDir = "",
   [string]$BranchName = ""
@@ -20,9 +20,7 @@ function Load-Expected($p){
   $raw = Import-Csv $p
   if(-not $raw){ throw "CSV empty: $p" }
   $map=@{}; foreach($h in $raw[0].psobject.Properties.Name){ $map[(Normalize $h)]=$h }
-  foreach($need in 'resourcegroupname','roledefinitionname','adgroupname'){
-    if(-not $map.ContainsKey($need)){ throw "CSV '$p' missing column like '$need'" }
-  }
+  foreach($need in 'resourcegroupname','roledefinitionname','adgroupname'){ if(-not $map.ContainsKey($need)){ throw "CSV '$p' missing col like '$need'" } }
   $rows=@()
   foreach($r in $raw){
     $rows += [pscustomobject]@{
@@ -33,7 +31,7 @@ function Load-Expected($p){
   }
   $rows
 }
-function Get-EnvFromSub([string]$n){ if($n -match '(?i)\b(prod|production|prd)\b'){ 'PRODUCTION' } else { 'NONPRODUCTION' } }
+function Get-EnvFromSub([string]$n){ if($n -match '(?i)\b(prod|prd|production)\b'){ 'PRODUCTION' } else { 'NONPRODUCTION' } }
 function Resolve-Group([string]$name){
   if([string]::IsNullOrWhiteSpace($name)){ return $null }
   $g = Get-AzADGroup -DisplayName $name -ErrorAction SilentlyContinue
@@ -57,9 +55,8 @@ $rowsProd    = Load-Expected $ProdCsvPath
 $rowsNonProd = Load-Expected $NonProdCsvPath
 $allOut = New-Object System.Collections.Generic.List[object]
 
-# Subscriptions for this custodian
+# Subs containing custodian name and ADH
 $subs = Get-AzSubscription | ? { $_.Name -match '(?i)ADH' -and $_.Name -match [regex]::Escape($adh_group) }
-if(-not $subs){ Write-Warning "No subscriptions found for adh_group '$adh_group'"; }
 
 foreach($sub in $subs){
   Set-AzContext -Tenant $TenantId -SubscriptionId $sub.Id | Out-Null
@@ -70,49 +67,35 @@ foreach($sub in $subs){
   $rgMap = @{}; foreach($rg in $rgList){ $rgMap[$rg.ResourceGroupName.ToLowerInvariant()]=$rg }
 
   foreach($e in $expected){
-    $inRG   = $e.RG
-    $inRole = $e.Role
-    $inAAD  = $e.AAD
-
-    # replace <Custodian> in ALL columns
-    $rgName   = $inRG   -replace '<Custodian>', $adh_group
-    $roleName = $inRole -replace '<Custodian>', $adh_group
-    $aadName  = $inAAD  -replace '<Custodian>', $adh_group
+    $rgName   = $e.RG   -replace '<Custodian>', $adh_group
+    $roleName = $e.Role -replace '<Custodian>', $adh_group
+    $aadName  = $e.AAD  -replace '<Custodian>', $adh_group
 
     $rgObj = $null
     $rgKey = ($rgName ? $rgName.ToLowerInvariant() : '')
     if($rgKey -and $rgMap.ContainsKey($rgKey)){ $rgObj = $rgMap[$rgKey] }
 
     if(-not $rgObj){
-      $allOut.Add([pscustomobject]@{
-        SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
-        InputResourceGroup=$inRG; ScannedResourceGroup=$rgName
-        RoleDefinition=$roleName; InputAdGroup=$inAAD; ResolvedAdGroup=$aadName
-        RGStatus='NOT_FOUND'; PermissionStatus='N/A_RG_NOT_FOUND'; Details='Resource group not found'
-      })
+      $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+        InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
+        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='NOT_FOUND'; PermissionStatus='N/A_RG_NOT_FOUND'; Details='RG not found' })
       continue
     }
 
     $grp = Resolve-Group $aadName
     if(-not $grp){
-      $allOut.Add([pscustomobject]@{
-        SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
-        InputResourceGroup=$inRG; ScannedResourceGroup=$rgName
-        RoleDefinition=$roleName; InputAdGroup=$inAAD; ResolvedAdGroup=$aadName
-        RGStatus='EXISTS'; PermissionStatus='N/A_GROUP_NOT_FOUND'; Details='Entra ID group not found'
-      })
+      $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+        InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
+        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='EXISTS'; PermissionStatus='N/A_GROUP_NOT_FOUND'; Details='Group not found' })
       continue
     }
 
     $scope = "/subscriptions/$($sub.Id)/resourceGroups/$rgName"
     $ra = Get-AzRoleAssignment -Scope $scope -ObjectId $grp.Id -RoleDefinitionName $roleName -ErrorAction SilentlyContinue
-
-    $allOut.Add([pscustomobject]@{
-      SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
-      InputResourceGroup=$inRG; ScannedResourceGroup=$rgName
-      RoleDefinition=$roleName; InputAdGroup=$inAAD; ResolvedAdGroup=$aadName; GroupObjectId=$grp.Id
-      RGStatus='EXISTS'; PermissionStatus=($(if($ra){'EXISTS'}else{'MISSING'})); Details=$(if($ra){''}else{'Role assignment not found at RG scope'})
-    })
+    $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+      InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
+      InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; GroupObjectId=$grp.Id
+      RGStatus='EXISTS'; PermissionStatus=($(if($ra){'EXISTS'}else{'MISSING'})); Details=$(if($ra){''}else{'Role assignment missing'}) })
   }
 }
 
