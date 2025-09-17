@@ -47,8 +47,6 @@ Connect-AzAccount -ServicePrincipal -Tenant $TenantId -Credential $cred | Out-Nu
 $OutputDir = Ensure-Dir $OutputDir
 $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
 $outCsv  = Join-Path $OutputDir "rg_permissions_${adh_group}_$stamp.csv"
-$outHtml = Join-Path $OutputDir "rg_permissions_${adh_group}_$stamp.html"
-$outJson = Join-Path $OutputDir "rg_permissions_${adh_group}_$stamp.json"
 
 $rowsProd    = Load-Expected $ProdCsvPath
 $rowsNonProd = Load-Expected $NonProdCsvPath
@@ -73,28 +71,24 @@ foreach($sub in $subs){
     if($rgKey -and $rgMap.ContainsKey($rgKey)){ $rgObj = $rgMap[$rgKey] }
 
     if(-not $rgObj){
-      $allOut.Add([pscustomobject]@{
-        SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+      $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
         InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
-        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='NOT_FOUND'; PermissionStatus='N/A_RG_NOT_FOUND'; Details='Resource group not found'
-      })
+        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='NOT_FOUND'; PermissionStatus='N/A_RG_NOT_FOUND'; Details='Resource group not found' })
       continue
     }
 
     $grp = Resolve-Group $aadName
     if(-not $grp){
-      $allOut.Add([pscustomobject]@{
-        SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+      $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
         InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
-        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='EXISTS'; PermissionStatus='N/A_GROUP_NOT_FOUND'; Details='Entra ID group not found'
-      })
+        InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; RGStatus='EXISTS'; PermissionStatus='N/A_GROUP_NOT_FOUND'; Details='Entra ID group not found' })
       continue
     }
 
     $scope = "/subscriptions/$($sub.Id)/resourceGroups/$rgName"
     $ra = Get-AzRoleAssignment -Scope $scope -ObjectId $grp.Id -RoleDefinitionName $roleName -ErrorAction SilentlyContinue
-    $allOut.Add([pscustomobject]@{
-      SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+
+    $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
       InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
       InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; GroupObjectId=$grp.Id
       RGStatus='EXISTS'; PermissionStatus=($(if($ra){'EXISTS'}else{'MISSING'})); Details=$(if($ra){''}else{'Role assignment not found'}) })
@@ -102,5 +96,4 @@ foreach($sub in $subs){
 }
 
 $allOut | Export-Csv $outCsv -NoTypeInformation -Encoding UTF8
-($allOut | ConvertTo-Html -Title "RG Permissions $adh_group $stamp" -PreContent "<h2>RG Permissions $adh_group ($BranchName)</h2>") | Set-Content -Path $outHtml -Encoding UTF8
-$allOut | ConvertTo-Json -Depth 5 | Set-Content -Path $outJson -Encoding UTF8
+Write-Host "CSV:  $outCsv"
