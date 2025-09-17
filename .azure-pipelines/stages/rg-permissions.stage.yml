@@ -14,9 +14,13 @@ parameters:
   useDemands: true
 
 - stage: RG_Permissions
-  displayName: ${{ format('RG Permissions ({0}{1})',
-                  parameters.run_mode,
-                  if(eq(parameters.run_mode,'ByCustodian'), format(': {0}', parameters.adh_group), '')) }}
+  displayName: >-
+    RG Permissions (${{
+      format('{0}{1}',
+        parameters.run_mode,
+        if(eq(parameters.run_mode,'ByCustodian'), format(':{0}', parameters.adh_group), '')
+      )
+    }})
 
   variables:
     outDir: ${{ parameters.outDir }}
@@ -35,6 +39,7 @@ parameters:
           -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "rg-perms"
         publishPath: "$(outDir)"
+
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
@@ -55,6 +60,7 @@ parameters:
           -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
         artifactName: "rg-perms-ALLADH"
         publishPath: "$(outDir)"
+
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
