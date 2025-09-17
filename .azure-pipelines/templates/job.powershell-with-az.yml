@@ -1,4 +1,4 @@
-# PowerShell job template with pool selection and optional capability demands
+# PowerShell job template with self-hosted pool rules & optional demands
 parameters:
   variableGroup: ''
   displayName: ''
@@ -11,8 +11,8 @@ parameters:
 
   # Agent control
   poolType: 'hosted'          # 'hosted' | 'self'
-  poolName: ''                # optional explicit name
-  poolSuffix: '_agent1'       # used only when poolType=self & poolName=''
+  poolName: ''                # explicit name (if provided, used as-is)
+  poolSuffix: '_agent1'       # used when poolType=self & poolName=''
   adh_group: ''               # used for default pool name & optional demands
   adh_subscription_type: ''   # prd | nonprd
   useDemands: true            # set false for multi-custodian shared pool
@@ -21,7 +21,6 @@ jobs:
 - job: run_powershell
   displayName: ${{ parameters.displayName }}
 
-  # Agent selection
   ${{ if eq(parameters.poolType, 'hosted') }}:
     pool:
       vmImage: 'windows-latest'
@@ -49,11 +48,8 @@ jobs:
         targetType: inline
         pwsh: true
         script: |
-          try {
-            Get-Module -ListAvailable Az.Accounts | Out-Null
-          } catch {
-            Install-Module Az -Scope AllUsers -Force -AllowClobber
-          }
+          try { Get-Module -ListAvailable Az.Accounts | Out-Null }
+          catch { Install-Module Az -Scope AllUsers -Force -AllowClobber }
 
   - task: PowerShell@2
     displayName: Prepare output folder
@@ -63,9 +59,7 @@ jobs:
       script: |
         $out = "${{ parameters.publishPath }}"
         if ([string]::IsNullOrWhiteSpace($out)) { throw "publishPath parameter is empty." }
-        if (-not (Test-Path -LiteralPath $out)) {
-          New-Item -ItemType Directory -Path $out -Force | Out-Null
-        }
+        if (-not (Test-Path -LiteralPath $out)) { New-Item -ItemType Directory -Path $out -Force | Out-Null }
         Write-Host "Prepared: $out"
 
   - task: PowerShell@2
