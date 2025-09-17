@@ -47,8 +47,6 @@ Connect-AzAccount -ServicePrincipal -Tenant $TenantId -Credential $cred | Out-Nu
 $OutputDir = Ensure-Dir $OutputDir
 $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
 $outCsv  = Join-Path $OutputDir "rg_permissions_ALLADH_$stamp.csv"
-$outHtml = Join-Path $OutputDir "rg_permissions_ALLADH_$stamp.html"
-$outJson = Join-Path $OutputDir "rg_permissions_ALLADH_$stamp.json"
 
 $rowsProd    = Load-Expected $ProdCsvPath
 $rowsNonProd = Load-Expected $NonProdCsvPath
@@ -90,8 +88,8 @@ foreach($sub in $subs){
 
     $scope = "/subscriptions/$($sub.Id)/resourceGroups/$rgName"
     $ra = Get-AzRoleAssignment -Scope $scope -ObjectId $grp.Id -RoleDefinitionName $roleName -ErrorAction SilentlyContinue
-    $allOut.Add([pscustomobject]@{
-      SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
+
+    $allOut.Add([pscustomobject]@{SubscriptionName=$sub.Name; SubscriptionId=$sub.Id; Environment=$env
       InputResourceGroup=$e.RG; ScannedResourceGroup=$rgName; RoleDefinition=$roleName
       InputAdGroup=$e.AAD; ResolvedAdGroup=$aadName; GroupObjectId=$grp.Id
       RGStatus='EXISTS'; PermissionStatus=($(if($ra){'EXISTS'}else{'MISSING'})); Details=$(if($ra){''}else{'Role assignment not found'}) })
@@ -99,5 +97,4 @@ foreach($sub in $subs){
 }
 
 $allOut | Export-Csv $outCsv -NoTypeInformation -Encoding UTF8
-($allOut | ConvertTo-Html -Title "RG Permissions ALLADH $stamp" -PreContent "<h2>RG Permissions ALLADH ($BranchName)</h2>") | Set-Content -Path $outHtml -Encoding UTF8
-$allOut | ConvertTo-Json -Depth 5 | Set-Content -Path $outJson -Encoding UTF8
+Write-Host "CSV:  $outCsv"
