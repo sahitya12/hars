@@ -12,13 +12,9 @@ parameters:
   useDemands: true
 
 - stage: KV_Permissions
-  displayName: >-
-    KV Permissions (${{
-      format('{0}{1}',
-        parameters.run_mode,
-        if(eq(parameters.run_mode, 'ByCustodian'), format(':{0}', parameters.adh_group), '')
-      )
-    }})
+  displayName: ${{ format('KV Permissions ({0}{1})',
+                  parameters.run_mode,
+                  if(eq(parameters.run_mode,'ByCustodian'), format(': {0}', parameters.adh_group), '')) }}
 
   variables:
     outDir: ${{ parameters.outDir }}
