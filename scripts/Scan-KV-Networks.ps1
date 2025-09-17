@@ -11,7 +11,6 @@ $ErrorActionPreference='Stop'
 Import-Module Az.Accounts -ErrorAction Stop
 Import-Module Az.Resources -ErrorAction Stop
 Import-Module Az.KeyVault -ErrorAction Stop
-
 function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p = Join-Path (Get-Location) 'kv-networks-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } return $p }
 
 $sec=ConvertTo-SecureString $ClientSecret -AsPlainText -Force
@@ -41,3 +40,4 @@ foreach($sub in $subs){
 }
 
 $rows | Export-Csv $outCsv -NoTypeInformation -Encoding UTF8
+Write-Host "CSV: $outCsv"
