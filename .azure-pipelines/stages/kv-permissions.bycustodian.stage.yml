@@ -1,0 +1,34 @@
+parameters:
+  adh_group: ''
+  adh_subscription_type: ''
+  variableGroup: 'modernization_tfstate_backend_details'
+  outDir: '$(Build.ArtifactStagingDirectory)/kv-perms'
+  branchName: ''
+  poolType: 'self'
+  poolSuffix: '_agent1'
+  poolName: ''
+  useDemands: true
+
+stages:
+- stage: KV_Permissions_ByCustodian
+  displayName: "KV Permissions – ${{ parameters.adh_group }}"
+  variables:
+    outDir: ${{ parameters.outDir }}
+  jobs:
+  - template: ../templates/job.powershell-with-az.yml
+    parameters:
+      variableGroup: ${{ parameters.variableGroup }}
+      displayName: 'KV Permissions Scan (ByCustodian)'
+      scriptPath: 'sanitychecks/scripts/Scan-KV-Permissions.ps1'
+      workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
+      arguments: >
+        -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
+        -adh_group "${{ parameters.adh_group }}" -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+      artifactName: 'kv-perms'
+      publishPath: '$(outDir)'
+      poolType: ${{ parameters.poolType }}
+      poolName: ${{ parameters.poolName }}
+      poolSuffix: ${{ parameters.poolSuffix }}
+      adh_group: ${{ parameters.adh_group }}
+      adh_subscription_type: ${{ parameters.adh_subscription_type }}
+      useDemands: ${{ parameters.useDemands }}
