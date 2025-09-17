@@ -1,0 +1,33 @@
+parameters:
+  adh_subscription_type: ''
+  variableGroup: 'modernization_tfstate_backend_details'
+  outDir: '$(Build.ArtifactStagingDirectory)/kv-firewall'
+  branchName: ''
+  poolType: 'self'
+  poolName: ''
+  poolSuffix: '_agent1'
+  useDemands: false
+
+stages:
+- stage: KV_Firewall_AllADH
+  displayName: "KV Firewall – ALLADH"
+  variables:
+    outDir: ${{ parameters.outDir }}
+  jobs:
+  - template: ../templates/job.powershell-with-az.yml
+    parameters:
+      variableGroup: ${{ parameters.variableGroup }}
+      displayName: 'KV Firewall Scan (AllADH)'
+      scriptPath: 'sanitychecks/scripts/Scan-KV-Networks.ps1'
+      workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
+      arguments: >
+        -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
+        -ScanAll -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+      artifactName: 'kv-firewall-ALLADH'
+      publishPath: '$(outDir)'
+      poolType: ${{ parameters.poolType }}
+      poolName: ${{ parameters.poolName }}
+      poolSuffix: ${{ parameters.poolSuffix }}
+      adh_group: ''
+      adh_subscription_type: ${{ parameters.adh_subscription_type }}
+      useDemands: ${{ parameters.useDemands }}
