@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory=$true)][string]$TenantId,
   [Parameter(Mandatory=$true)][string]$ClientId,
   [Parameter(Mandatory=$true)][string]$ClientSecret,
-  [Parameter(Mandatory=$true)][string]$SecretCsvPath,   # header: SECRET_NAME
+  [Parameter(Mandatory=$true)][string]$SecretCsvPath,
   [Parameter(Mandatory=$true)][string]$adh_group,
   [string]$OutputDir="",
   [string]$BranchName=""
@@ -12,7 +12,7 @@ Import-Module Az.Accounts -ErrorAction Stop
 Import-Module Az.KeyVault -ErrorAction Stop
 Import-Module Az.Resources -ErrorAction Stop
 
-function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p=Join-Path (Get-Location) 'kv-secrets-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } $p }
+function Ensure-Dir([string]$p){ if([string]::IsNullOrWhiteSpace($p)){ $p = Join-Path (Get-Location) 'kv-secrets-out' } if(-not(Test-Path $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } return $p }
 
 $sec=ConvertTo-SecureString $ClientSecret -AsPlainText -Force
 $cred=[pscredential]::new($ClientId,$sec)
@@ -35,7 +35,10 @@ foreach($s in $subs){
     foreach($name in $exp){
       $exists=$false
       try { $null = Get-AzKeyVaultSecret -VaultName $v.VaultName -Name $name -ErrorAction Stop; $exists=$true } catch {}
-      $rows.Add([pscustomobject]@{ SubscriptionName=$s.Name; Vault=$v.VaultName; ResourceGroup=$v.ResourceGroupName; SecretName=$name; Exists=$(if($exists){'EXISTS'}else{'MISSING'}) })
+      $rows.Add([pscustomobject]@{
+        SubscriptionName=$s.Name; Vault=$v.VaultName; ResourceGroup=$v.ResourceGroupName
+        SecretName=$name; Exists=$(if($exists){'EXISTS'}else{'MISSING'})
+      })
     }
   }
 }
@@ -43,4 +46,3 @@ foreach($s in $subs){
 $rows | Export-Csv $outCsv -NoTypeInformation -Encoding UTF8
 ($rows | ConvertTo-Html -Title "KV Secrets $adh_group $stamp" -PreContent "<h2>KV Secrets $adh_group ($BranchName)</h2>") | Set-Content -Path $outHtml -Encoding UTF8
 $rows | ConvertTo-Json -Depth 5 | Set-Content -Path $outJson -Encoding UTF8
-Write-Host "CSV:  $outCsv"; Write-Host "HTML: $outHtml"; Write-Host "JSON: $outJson"
