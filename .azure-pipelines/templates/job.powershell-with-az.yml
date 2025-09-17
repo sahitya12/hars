@@ -1,4 +1,4 @@
-# PowerShell job template with pool rules & optional capability demands
+# PowerShell job template with pool selection and optional demands
 parameters:
   variableGroup: ''
   displayName: ''
@@ -12,7 +12,7 @@ parameters:
   # Agent control
   poolType: 'hosted'          # 'hosted' | 'self'
   poolName: ''                # optional explicit name
-  poolSuffix: '_agent1'       # used only when poolType=self & poolName=''
+  poolSuffix: '_agent1'       # used when poolType=self & poolName=''
   adh_group: ''               # used for default pool name & optional demands
   adh_subscription_type: ''   # prd | nonprd
   useDemands: true            # set false for multi-custodian shared pool
