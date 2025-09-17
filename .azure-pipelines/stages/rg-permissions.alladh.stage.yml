@@ -1,0 +1,37 @@
+parameters:
+  adh_subscription_type: ''        # prd | nonprd
+  prodCsvPath: ''
+  nonProdCsvPath: ''
+  variableGroup: 'modernization_tfstate_backend_details'
+  outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
+  branchName: ''
+  poolType: 'self'
+  poolName: ''                     # must be set by pipeline to MDM_*_agent1
+  poolSuffix: '_agent1'
+  useDemands: false
+
+stages:
+- stage: RG_Permissions_AllADH
+  displayName: "RG Permissions – ALLADH"
+  variables:
+    outDir: ${{ parameters.outDir }}
+
+  jobs:
+  - template: ../templates/job.powershell-with-az.yml
+    parameters:
+      variableGroup: ${{ parameters.variableGroup }}
+      displayName: 'RG Permissions Scan (AllADH)'
+      scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-AllADH.ps1'
+      workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
+      arguments: >
+        -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
+        -ProdCsvPath "${{ parameters.prodCsvPath }}" -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
+        -OutputDir "$(outDir)" -BranchName "${{ parameters.branchName }}"
+      artifactName: 'rg-perms-ALLADH'
+      publishPath: '$(outDir)'
+      poolType: ${{ parameters.poolType }}
+      poolName: ${{ parameters.poolName }}
+      poolSuffix: ${{ parameters.poolSuffix }}
+      adh_group: ''   # not used
+      adh_subscription_type: ${{ parameters.adh_subscription_type }}
+      useDemands: ${{ parameters.useDemands }}
