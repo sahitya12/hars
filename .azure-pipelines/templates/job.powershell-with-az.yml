@@ -1,27 +1,30 @@
+# PowerShell job template with pool rules & optional capability demands
 parameters:
-  variableGroup: ""
-  displayName: ""
-  scriptPath: ""
-  workingDir: ""
-  arguments: ""
-  artifactName: ""
-  publishPath: ""
+  variableGroup: ''
+  displayName: ''
+  scriptPath: ''
+  workingDir: ''
+  arguments: ''
+  artifactName: ''
+  publishPath: ''
   ensureAz: false
 
-  poolType: "hosted"          # hosted | self
-  poolName: ""                # explicit name when poolType=self, else computed
-  poolSuffix: "_agent1"       # only used if poolType=self and poolName=""
-  adh_group: ""               # for computed pool name and optional demands
-  adh_subscription_type: ""   # prd | nonprd
-  useDemands: true
+  # Agent control
+  poolType: 'hosted'          # 'hosted' | 'self'
+  poolName: ''                # optional explicit name
+  poolSuffix: '_agent1'       # used only when poolType=self & poolName=''
+  adh_group: ''               # used for default pool name & optional demands
+  adh_subscription_type: ''   # prd | nonprd
+  useDemands: true            # set false for multi-custodian shared pool
 
 jobs:
 - job: run_powershell
   displayName: ${{ parameters.displayName }}
 
+  # Agent selection
   ${{ if eq(parameters.poolType, 'hosted') }}:
     pool:
-      vmImage: "windows-latest"
+      vmImage: 'windows-latest'
 
   ${{ if ne(parameters.poolType, 'hosted') }}:
     pool:
@@ -39,6 +42,19 @@ jobs:
   steps:
   - checkout: self
 
+  - ${{ if parameters.ensureAz }}:
+    - task: PowerShell@2
+      displayName: Ensure Az modules
+      inputs:
+        targetType: inline
+        pwsh: true
+        script: |
+          try {
+            Get-Module -ListAvailable Az.Accounts | Out-Null
+          } catch {
+            Install-Module Az -Scope AllUsers -Force -AllowClobber
+          }
+
   - task: PowerShell@2
     displayName: Prepare output folder
     inputs:
@@ -53,7 +69,7 @@ jobs:
         Write-Host "Prepared: $out"
 
   - task: PowerShell@2
-    displayName: Run script
+    displayName: Run ${{ parameters.scriptPath }}
     inputs:
       targetType: filePath
       filePath: ${{ parameters.scriptPath }}
