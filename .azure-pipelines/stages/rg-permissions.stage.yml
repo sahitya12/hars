@@ -1,30 +1,38 @@
+# Stage template: RG Permissions
 parameters:
-  run_mode: "ByCustodian"
-  adh_group: ""
-  adh_subscription_type: ""
-  prodCsvPath: ""
-  nonProdCsvPath: ""
-  variableGroup: "modernization_tfstate_backend_details"
-  outDir: "$(Build.ArtifactStagingDirectory)/rg-perms"
-  branchName: ""
-  poolType: "hosted"
-  poolSuffix: "_agent1"
-  poolName: ""
+  run_mode: 'ByCustodian'          # ByCustodian | AllADH
+  adh_group: ''
+  adh_subscription_type: ''        # prd | nonprd
+  prodCsvPath: ''
+  nonProdCsvPath: ''
+  variableGroup: 'modernization_tfstate_backend_details'
+  outDir: '$(Build.ArtifactStagingDirectory)/rg-perms'
+  branchName: ''
+  poolType: 'hosted'               # hosted | self
+  poolSuffix: '_agent1'
+  poolName: ''                     # explicit or computed
   useDemands: true
 
-stages:
 - stage: RG_Permissions
-  displayName: "RG Permissions"
+  displayName: >-
+    RG Permissions (${{
+      format('{0}{1}',
+        parameters.run_mode,
+        if(eq(parameters.run_mode, 'ByCustodian'), format(':{0}', parameters.adh_group), '')
+      )
+    }})
+
   variables:
     outDir: ${{ parameters.outDir }}
+
   jobs:
   - ${{ if eq(parameters.run_mode, 'ByCustodian') }}:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
-        displayName: "RG Permissions Scan (ByCustodian)"
-        scriptPath: "sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1"
-        workingDir: "$(Build.SourcesDirectory)/sanitychecks/scripts"
+        displayName: 'RG Permissions Scan (ByCustodian)'
+        scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-ByCustodian.ps1'
+        workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
           -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
           -ProdCsvPath "${{ parameters.prodCsvPath }}" -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
@@ -42,9 +50,9 @@ stages:
     - template: ../templates/job.powershell-with-az.yml
       parameters:
         variableGroup: ${{ parameters.variableGroup }}
-        displayName: "RG Permissions Scan (AllADH)"
-        scriptPath: "sanitychecks/scripts/Scan-RG-Permissions-AllADH.ps1"
-        workingDir: "$(Build.SourcesDirectory)/sanitychecks/scripts"
+        displayName: 'RG Permissions Scan (AllADH)'
+        scriptPath: 'sanitychecks/scripts/Scan-RG-Permissions-AllADH.ps1'
+        workingDir: '$(Build.SourcesDirectory)/sanitychecks/scripts'
         arguments: >
           -TenantId "$(tenant_id)" -ClientId "$(backend_client_id)" -ClientSecret "$(backend_client_secret)"
           -ProdCsvPath "${{ parameters.prodCsvPath }}" -NonProdCsvPath "${{ parameters.nonProdCsvPath }}"
@@ -54,6 +62,6 @@ stages:
         poolType: ${{ parameters.poolType }}
         poolName: ${{ parameters.poolName }}
         poolSuffix: ${{ parameters.poolSuffix }}
-        adh_group: ""
+        adh_group: ''                           # not used
         adh_subscription_type: ${{ parameters.adh_subscription_type }}
         useDemands: false
