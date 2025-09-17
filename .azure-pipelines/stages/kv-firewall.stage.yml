@@ -1,4 +1,4 @@
-# Stage template: Key Vault Network/Firewall (single-stage wrapper)
+# Stage template: Key Vault Network/Firewall
 parameters:
   run_mode: 'ByCustodian'
   adh_group: ''
